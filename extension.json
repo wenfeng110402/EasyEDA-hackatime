@@ -1,0 +1,67 @@
+{
+	"name": "hackatime",
+	"uuid": "",
+	"displayName": "HackaTime",
+	"description": "Track your PCB design time with Hackatime",
+	"version": "1.0.0",
+	"publisher": "Wenfeng Ye",
+	"engines": {
+		"eda": "^3.0.0"
+	},
+	"license": "MIT",
+	"repository": {
+		"type": "extension-store",
+		"url": ""
+	},
+	"categories": "Productivity",
+	"keywords": [
+		"SDK"
+	],
+	"images": {
+		"logo": "./images/logo.png"
+	},
+	"homepage": "",
+	"bugs": "",
+	"activationEvents": {},
+	"entry": "./dist/index",
+	"dependentExtensions": {},
+	"headerMenus": {
+		"home": [
+			{
+				"id": "Hackatime",
+				"title": "Hackatime",
+				"menuItems": [
+					{"id": "toggle", "title": "Start/Stop Tracking", "registerFn": "toggle"},
+					{"id": "settings", "title": "Settings panel", "registerFn": "openSettings"},
+					{"id": "stats", "title": "Statistics", "registerFn": "showStats"},
+					{"id": "help", "title": "Help", "registerFn": "help"}
+
+				]
+			}
+		],
+		"sch": [
+			{
+				"id": "Hackatime",
+				"title": "Hackatime",
+				"menuItems": [
+					{"id": "toggle", "title": "Start/Stop Tracking", "registerFn": "toggle"},
+					{"id": "settings", "title": "Settings panel", "registerFn": "openSettings"},
+					{"id": "stats", "title": "Statistics", "registerFn": "showStats"},
+					{"id": "help", "title": "Help", "registerFn": "help"}
+				]
+			}
+		],
+		"pcb": [
+			{
+				"id": "Hackatime",
+				"title": "Hackatime",
+				"menuItems": [
+					{"id": "toggle", "title": "Start/Stop Tracking", "registerFn": "toggle"},
+					{"id": "settings", "title": "Settings panel", "registerFn": "openSettings"},
+					{"id": "stats", "title": "Statistics", "registerFn": "showStats"},
+					{"id": "help", "title": "Help", "registerFn": "help"}
+				]
+			}
+		]
+	}
+}
