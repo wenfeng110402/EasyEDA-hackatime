@@ -1,5 +1,6 @@
 // Hackatime Extension for EasyEDA Pro
 // Based on easyeda-wakatime patterns, adapted for Hackatime
+// Thanks to https://github.com/radeeyate/easyeda-wakatime
 
 import * as extensionConfig from '../extension.json';
 
