@@ -1,204 +1,332 @@
-//定义所需的key IMPORTANT！！！！
-const STORAGE_KEY_API_KEY = 'hackatime_api_key';
-const STORAGE_KEY_PAUSED = 'hackatime_paused';
-const STORAGE_KEY_CACHE = 'hackatime_cache';
+// Hackatime Extension for EasyEDA Pro
+// Based on easyeda-wakatime patterns, adapted for Hackatime
+
+import * as extensionConfig from '../extension.json';
+
+// Constants
+const VERSION = extensionConfig.version;
+const TITLE = 'Hackatime';
 const DEFAULT_API_URL = 'https://hackatime.hackclub.com/api/hackatime/v1';
-const onNetworkOnline = () => flushCache();
-const onUserKey = () => (lastActivityTime = Date.now());
-const onUserMouse = () => (lastActivityTime = Date.now());
+const HEARTBEAT_INTERVAL = 25000; // 25 seconds
+const INACTIVITY_TIMEOUT = 30000; // 30 seconds
 
-//2
-let lastActivityTime = Date.now();
-let heartbeatInterval: any = null;
+// Storage keys
+const API_URL_KEY = 'apiURL';
+const API_KEY_KEY = 'apiKey';
+const LAST_EVENT_TIME_KEY = 'lastEventTime';
+const PREVIOUS_SCH_COUNT_KEY = 'previousSchCount';
+const PREVIOUS_PCB_COUNT_KEY = 'previousPcbCount';
 
-//when activate
-export function activate() {
-	console.log('HackaTime extension activated');
+const COMMON_HEADERS = {
+	'Accept': 'application/json',
+	'Content-Type': 'application/json',
+};
 
-	if(typeof window !== 'undefined') {
-		window.addEventListener('mousedown', onUserMouse);
-        window.addEventListener('keydown', onUserKey);
-		window.addEventListener('online', onNetworkOnline);
-	}
-
-	//冲刷缓存的数据
-	flushCache();
-
-	startHeartbeatLoop();
-
+interface Heartbeat {
+	entity: string;
+	type: string;
+	category: string;
+	time: number;
+	project: string;
+	language: string;
+	is_write: boolean;
+	lines?: number;
+	line_additions?: number;
+	line_deletions?: number;
 }
 
-//when deactivate
-export function deactivate() {
-	if(heartbeatInterval) {
-		clearInterval(heartbeatInterval);
-	}
+// ─────────────────────────────────────────────────────────────────────────────
+// Helper functions (declared first to avoid use-before-define)
+// ─────────────────────────────────────────────────────────────────────────────
 
-	if(typeof window !== 'undefined') {
-		window.removeEventListener('mousedown', onUserMouse);
-		window.removeEventListener('keydown', onUserKey);
-		window.removeEventListener('online', onNetworkOnline);
+async function checkApiCredentials(): Promise<boolean> {
+	const apiKey = await eda.sys_Storage.getExtensionUserConfig(API_KEY_KEY);
+	if (!apiKey) {
+		eda.sys_MessageBox.showInformationMessage(
+			'Please set your Hackatime API Key in Settings first.',
+			TITLE,
+		);
+		return false;
 	}
+	return true;
 }
 
-export function showStats(){
-	const apiUrl = localStorage.getItem('hackatime_api_url') || DEFAULT_API_URL;
-	const dashboardUrl = apiUrl.split('/api/')[0];
+async function getApiUrl(): Promise<string> {
+	const url = await eda.sys_Storage.getExtensionUserConfig(API_URL_KEY);
+	return url || DEFAULT_API_URL;
+}
 
-	eda.sys_Dialog.showConfirmationMessage(
-		'Open Hackatime Dashboard in your browser?',
-		'Show Statistics',
-		'Confirm',
-		'Cancel',
-		(confirmed: boolean) => {
-			if (confirmed) window.open(dashboardUrl, '_blank');
+async function getProjectInfo(): Promise<{ name: string; editorType: 'Schematic' | 'PCB' | 'Project'; entity: string } | null> {
+	try {
+		const projectInfo = await eda.dmt_Project.getCurrentProjectInfo();
+		if (!projectInfo) {
+			eda.sys_Log.add(`[${TITLE}] Could not get project info`, ESYS_LogType.WARNING);
+			return null;
 		}
-	)
-}
 
-export function help(){
-	eda.sys_Dialog.showInformationMessage(
-		'For help with Hackatime, please visit https://hackatime.hackclub.com/docs',
-		'About Hackatime'
-	);
-}
+		let editorType: 'Schematic' | 'PCB' | 'Project' = 'Project';
+		let entity = projectInfo.friendlyName;
 
-export function openSettings() {
-	const currentKey = localStorage.getItem(STORAGE_KEY_API_KEY) || '';
-
-	eda.sys_Dialog.showInputDialog(
-		'Hackatime API Key',
-		undefined,
-		'Set Hackatime API Key',
-		'text',
-		currentKey,
-		{ placeholder: 'Enter your Hackatime API Key' },
-		(value) => {
-			if (value !== undefined && value !== null) {
-				localStorage.setItem(STORAGE_KEY_API_KEY, String(value).trim());
-				eda.sys_Dialog.showInformationMessage('API Key saved', 'Hackatime');
+		try {
+			const schInfo = await eda.dmt_Schematic.getCurrentSchematicInfo();
+			if (schInfo) {
+				editorType = 'Schematic';
+				entity = schInfo.name || projectInfo.friendlyName;
+			}
+			else {
+				const pcbInfo = await eda.dmt_Pcb.getCurrentPcbInfo();
+				if (pcbInfo) {
+					editorType = 'PCB';
+					entity = pcbInfo.name || projectInfo.friendlyName;
+				}
 			}
 		}
-	);
-}
+		catch {
+			// Fallback to Project type
+		}
 
-export function toggle() {
-	const isPaused = localStorage.getItem(STORAGE_KEY_PAUSED) === 'true';
-	const nextState = !isPaused;
-	localStorage.setItem(STORAGE_KEY_PAUSED, String(nextState));
-	eda.sys_Dialog.showInformationMessage(
-		`Hackatime Detect${nextState ? 'paused' : 'resumed'}`,
-		'Hackatime'
-	);
-}
-
-function startHeartbeatLoop() {
-	if (heartbeatInterval) {
-		clearInterval(heartbeatInterval);
+		return { name: projectInfo.friendlyName, editorType, entity };
 	}
-	heartbeatInterval = setInterval(() => {
-		sendHeartbeat();
-	}, 2 * 60 * 1000);
+	catch (error) {
+		eda.sys_Log.add(`[${TITLE}] Error getting project info: ${error}`, ESYS_LogType.ERROR);
+		return null;
+	}
 }
 
-async function sendHeartbeat() {
-	const isPaused = localStorage.getItem(STORAGE_KEY_PAUSED) === 'true';
-	if (isPaused) return;
+async function getElementCount(editorType: 'Schematic' | 'PCB' | 'Project'): Promise<{ count: number; type: string }> {
+	if (editorType === 'Schematic') {
+		try {
+			const count
+				= (await eda.sch_PrimitiveComponent.getAll()).length
+					+ (await eda.sch_PrimitiveWire.getAll()).length
+					+ (await eda.sch_PrimitiveText.getAll()).length
+					+ (await eda.sch_PrimitiveBus.getAll()).length
+					+ (await eda.sch_PrimitivePin.getAll()).length;
+			return { count, type: 'Schematic' };
+		}
+		catch {
+			return { count: 0, type: 'Schematic' };
+		}
+	}
+	else if (editorType === 'PCB') {
+		try {
+			const count
+				= (await eda.pcb_PrimitiveComponent.getAll()).length
+					+ (await eda.pcb_PrimitiveLine.getAll()).length
+					+ (await eda.pcb_PrimitiveArc.getAll()).length
+					+ (await eda.pcb_PrimitiveVia.getAll()).length
+					+ (await eda.pcb_PrimitivePad.getAll()).length;
+			return { count, type: 'PCB' };
+		}
+		catch {
+			return { count: 0, type: 'PCB' };
+		}
+	}
 
-	const apiKey = localStorage.getItem(STORAGE_KEY_API_KEY);
-	if (!apiKey) return;
+	// Try schematic first, then PCB
+	try {
+		const schCount
+			= (await eda.sch_PrimitiveComponent.getAll()).length
+				+ (await eda.sch_PrimitiveWire.getAll()).length;
+		if (schCount > 0)
+			return { count: schCount, type: 'Schematic' };
+	}
+	catch { /* ignore */ }
 
-	// 2分钟内无操作则不发送
-	if (Date.now() - lastActivityTime > 2 * 60 * 1000) return;
+	try {
+		const pcbCount
+			= (await eda.pcb_PrimitiveComponent.getAll()).length
+				+ (await eda.pcb_PrimitiveLine.getAll()).length;
+		if (pcbCount > 0)
+			return { count: pcbCount, type: 'PCB' };
+	}
+	catch { /* ignore */ }
 
-	const projectInfo = await eda.dmt_Project.getCurrentProjectInfo();
-	const docInfo = await eda.dmt_SelectControl.getCurrentDocumentInfo();
-	if (!projectInfo) return;
+	return { count: 0, type: 'Project' };
+}
 
-	const payload = {
-		entity: docInfo?.uuid || 'unknown',
+async function assembleHeartbeat(projectInfo: { name: string; editorType: 'Schematic' | 'PCB' | 'Project'; entity: string }): Promise<Heartbeat[]> {
+	const heartbeat: Heartbeat = {
+		entity: `./${projectInfo.entity}`,
 		type: 'file',
 		category: 'designing',
-		time: Math.floor(Date.now() / 1000),
-		project: projectInfo.friendlyName || 'Unknown Project',
-		language: String(docInfo?.documentType) === 'pcb' ? 'EasyEDA PCB' : 'EasyEDA Schematic',
-		is_write: true
+		time: Date.now() / 1000,
+		project: projectInfo.name,
+		language: `EasyEDA ${projectInfo.editorType}`,
+		is_write: true,
 	};
 
+	// Get element counts for line tracking
+	const elementInfo = await getElementCount(projectInfo.editorType);
+	const prevKey = projectInfo.editorType === 'PCB' ? PREVIOUS_PCB_COUNT_KEY : PREVIOUS_SCH_COUNT_KEY;
+	const prevCountStr = await eda.sys_Storage.getExtensionUserConfig(prevKey);
+
+	let prevCount = 0;
+	if (prevCountStr && prevCountStr !== 'load') {
+		prevCount = Number.parseInt(prevCountStr, 10) || 0;
+	}
+	else {
+		prevCount = elementInfo.count;
+	}
+
+	heartbeat.lines = elementInfo.count;
+	heartbeat.line_additions = Math.max(0, elementInfo.count - prevCount);
+	heartbeat.line_deletions = Math.max(0, prevCount - elementInfo.count);
+	heartbeat.language = `EasyEDA ${elementInfo.type}`;
+
+	await eda.sys_Storage.setExtensionUserConfig(prevKey, elementInfo.count.toString());
+
+	return [heartbeat];
+}
+
+async function sendHeartbeat(): Promise<void> {
+	const apiKey = await eda.sys_Storage.getExtensionUserConfig(API_KEY_KEY);
+	if (!apiKey)
+		return;
+
+	const projectInfo = await getProjectInfo();
+	if (!projectInfo)
+		return;
+
+	const heartbeats = await assembleHeartbeat(projectInfo);
+	const apiUrl = await getApiUrl();
+
 	try {
-		const res = await eda.sys_ClientUrl.request(
-			`${DEFAULT_API_URL}/users/current/heartbeats`,
+		const response = await eda.sys_ClientUrl.request(
+			`${apiUrl}/users/current/heartbeats.bulk`,
 			'POST',
-			JSON.stringify(payload),
+			JSON.stringify(heartbeats),
 			{
 				headers: {
+					...COMMON_HEADERS,
 					Authorization: `Bearer ${apiKey}`,
-					'Content-Type': 'application/json'
-				}
-			}
+				},
+			},
 		);
 
-		if (!res || (res.status !== 200 && res.status !== 201)) {
-			cacheHeartbeat(payload);
-		} else {
-			// 成功则尝试冲刷本地缓存
-			flushCache();
+		if (response.ok) {
+			eda.sys_Log.add(`[${TITLE}] Heartbeat sent`, ESYS_LogType.INFO);
 		}
-	} catch (e) {
-		cacheHeartbeat(payload);
+		else {
+			eda.sys_Log.add(`[${TITLE}] Heartbeat error: ${response.status}`, ESYS_LogType.ERROR);
+		}
+	}
+	catch (error) {
+		eda.sys_Log.add(`[${TITLE}] Heartbeat error: ${error}`, ESYS_LogType.ERROR);
 	}
 }
 
-function cacheHeartbeat(item: any) {
-	try {
-		const raw = localStorage.getItem(STORAGE_KEY_CACHE) || '[]';
-		const arr = JSON.parse(raw);
-		arr.push(item);
-		// 限制最大缓存条数
-		if (arr.length > 500) arr.shift();
-		localStorage.setItem(STORAGE_KEY_CACHE, JSON.stringify(arr));
-	} catch (e) {
-		// 忽略任何本地存储错误
+async function startHeartbeatLoop(): Promise<void> {
+	while (true) {
+		await new Promise(resolve => setTimeout(resolve, HEARTBEAT_INTERVAL));
+
+		const lastEventStr = await eda.sys_Storage.getExtensionUserConfig(LAST_EVENT_TIME_KEY);
+		if (!lastEventStr)
+			continue;
+
+		const lastEventTime = Number.parseInt(lastEventStr, 10);
+		const timeDiff = Date.now() - lastEventTime;
+
+		if (timeDiff <= INACTIVITY_TIMEOUT) {
+			eda.sys_Log.add(`[${TITLE}] Activity detected, sending heartbeat`, ESYS_LogType.INFO);
+			await sendHeartbeat();
+		}
 	}
 }
 
-async function flushCache() {
+async function initializeHackatime(): Promise<void> {
+	const apiKey = await eda.sys_Storage.getExtensionUserConfig(API_KEY_KEY);
+
+	if (!apiKey) {
+		eda.sys_MessageBox.showInformationMessage(
+			'Welcome to Hackatime! Please configure your API Key via Settings menu.',
+			TITLE,
+		);
+	}
+
+	// Reset element counts on load
+	await eda.sys_Storage.setExtensionUserConfig(PREVIOUS_SCH_COUNT_KEY, 'load');
+	await eda.sys_Storage.setExtensionUserConfig(PREVIOUS_PCB_COUNT_KEY, 'load');
+
+	// Start heartbeat loop
+	startHeartbeatLoop();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Exported functions (menu handlers)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function activate(): Promise<void> {
+	eda.sys_Log.add(`[${TITLE}] Activated v${VERSION}`, ESYS_LogType.INFO);
+	await initializeHackatime();
+}
+
+export async function openSettings(): Promise<void> {
+	await eda.sys_IFrame.openIFrame('iframe/settings.html', 420, 280);
+}
+
+export async function showTodayStats(): Promise<void> {
+	if (!await checkApiCredentials())
+		return;
+
 	try {
-		const apiKey = localStorage.getItem(STORAGE_KEY_API_KEY);
-		if (!apiKey) return;
+		const apiUrl = await getApiUrl();
+		const apiKey = await eda.sys_Storage.getExtensionUserConfig(API_KEY_KEY);
 
-		const raw = localStorage.getItem(STORAGE_KEY_CACHE);
-		if (!raw) return;
-		const arr = JSON.parse(raw);
-		if (!Array.isArray(arr) || arr.length === 0) return;
+		const response = await eda.sys_ClientUrl.request(
+			`${apiUrl}/users/current/statusbar/today`,
+			'GET',
+			undefined,
+			{
+				headers: {
+					...COMMON_HEADERS,
+					Authorization: `Bearer ${apiKey}`,
+				},
+			},
+		);
 
-		// 清空缓存区，若发送失败会重新入队
-		localStorage.setItem(STORAGE_KEY_CACHE, JSON.stringify([]));
+		if (response.ok) {
+			const data = await response.json();
+			let statsText = 'No activity recorded today.';
 
-		for (const item of arr) {
-			try {
-				const res = await eda.sys_ClientUrl.request(
-					`${DEFAULT_API_URL}/users/current/heartbeats`,
-					'POST',
-					JSON.stringify(item),
-					{
-						headers: {
-							Authorization: `Bearer ${apiKey}`,
-							'Content-Type': 'application/json'
-						}
-					}
-				);
-
-				if (!res || (res.status !== 200 && res.status !== 201)) {
-					cacheHeartbeat(item);
+			if (data.data) {
+				if (data.data.grand_total && data.data.grand_total.text) {
+					statsText = `Today: ${data.data.grand_total.text}`;
 				}
-			} catch (e) {
-				cacheHeartbeat(item);
-				// 网络可能有问题，停止后续发送，留待下次重试
-				break;
+				else if (data.data.categories && data.data.categories.length > 0) {
+					const parts = data.data.categories.map((c: { text: string; name: string }) => `${c.text} (${c.name})`);
+					statsText = `Today: ${parts.join(', ')}`;
+				}
 			}
+
+			eda.sys_MessageBox.showInformationMessage(statsText, TITLE);
 		}
-	} catch (e) {
-		// 忽略
+		else {
+			eda.sys_Log.add(`[${TITLE}] Error fetching stats: ${response.status}`, ESYS_LogType.ERROR);
+			eda.sys_MessageBox.showInformationMessage('Failed to fetch today\'s stats.', TITLE);
+		}
+	}
+	catch (error) {
+		eda.sys_Log.add(`[${TITLE}] Error fetching stats: ${error}`, ESYS_LogType.ERROR);
+		eda.sys_MessageBox.showInformationMessage('Failed to fetch today\'s stats.', TITLE);
 	}
 }
+
+export async function showAbout(): Promise<void> {
+	eda.sys_MessageBox.showInformationMessage(
+		`Hackatime v${VERSION}\nTrack your EasyEDA design time.\n\nVisit: https://hackatime.hackclub.com`,
+		TITLE,
+	);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Event listener registration
+// ─────────────────────────────────────────────────────────────────────────────
+
+eda.pcb_Event.addMouseEventListener('mouseEvent', 'all', async () => {
+	const now = Date.now();
+	await eda.sys_Storage.setExtensionUserConfig(LAST_EVENT_TIME_KEY, now.toString());
+});
+
+// Auto-activate
+activate();

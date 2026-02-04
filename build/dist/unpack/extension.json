@@ -32,19 +32,24 @@
 				"title": "Hackatime",
 				"menuItems": [
 					{
+						"id": "toggle",
+						"title": "Start/Stop Tracking",
+						"registerFn": "toggle"
+					},
+					{
 						"id": "settings",
-						"title": "Settings",
+						"title": "Settings panel",
 						"registerFn": "openSettings"
 					},
 					{
-						"id": "today",
-						"title": "Today's Stats",
-						"registerFn": "showTodayStats"
+						"id": "stats",
+						"title": "Statistics",
+						"registerFn": "showStats"
 					},
 					{
-						"id": "about",
-						"title": "About",
-						"registerFn": "showAbout"
+						"id": "help",
+						"title": "Help",
+						"registerFn": "help"
 					}
 				]
 			}
@@ -55,19 +60,24 @@
 				"title": "Hackatime",
 				"menuItems": [
 					{
+						"id": "toggle",
+						"title": "Start/Stop Tracking",
+						"registerFn": "toggle"
+					},
+					{
 						"id": "settings",
-						"title": "Settings",
+						"title": "Settings panel",
 						"registerFn": "openSettings"
 					},
 					{
-						"id": "today",
-						"title": "Today's Stats",
-						"registerFn": "showTodayStats"
+						"id": "stats",
+						"title": "Statistics",
+						"registerFn": "showStats"
 					},
 					{
-						"id": "about",
-						"title": "About",
-						"registerFn": "showAbout"
+						"id": "help",
+						"title": "Help",
+						"registerFn": "help"
 					}
 				]
 			}
@@ -78,19 +88,24 @@
 				"title": "Hackatime",
 				"menuItems": [
 					{
+						"id": "toggle",
+						"title": "Start/Stop Tracking",
+						"registerFn": "toggle"
+					},
+					{
 						"id": "settings",
-						"title": "Settings",
+						"title": "Settings panel",
 						"registerFn": "openSettings"
 					},
 					{
-						"id": "today",
-						"title": "Today's Stats",
-						"registerFn": "showTodayStats"
+						"id": "stats",
+						"title": "Statistics",
+						"registerFn": "showStats"
 					},
 					{
-						"id": "about",
-						"title": "About",
-						"registerFn": "showAbout"
+						"id": "help",
+						"title": "Help",
+						"registerFn": "help"
 					}
 				]
 			}
