@@ -6,11 +6,13 @@ Track your PCB design time in [EasyEDA Pro](https://easyeda.com/) with [Hackatim
 
 ### Option 1: Download Release (Recommended)
 
-1. Download the `.eext` file from the [Releases](https://github.com/wenfeng110402/EasyEDA-hackatime/releases) page.
-2. Open [EasyEDA Pro](https://easyeda.com/page/download).
-3. Go to **Settings > Extensions > Extension Manager**.
-4. Click **Import Extensions** and select the downloaded `.eext` file.
-5. Click the text under **"External Interactions"** to enable network access.
+1. Go to [Actions](https://github.com/wenfeng110402/EasyEDA-hackatime/actions) tab
+2. Click on the latest successful workflow run
+3. Download the `.eext` file from the **Artifacts** section
+4. Open [EasyEDA Pro](https://easyeda.com/page/download)
+5. Go to **Settings > Extensions > Extension Manager**
+6. Click **Import Extensions** and select the downloaded `.eext` file
+7. Click the text under **"External Interactions"** to enable network access
 
 ### Option 2: Build from Source
 
@@ -34,6 +36,21 @@ The `.eext` file will be generated in `./build/dist`.
 2. Enter your API Key from [hackatime.hackclub.com](https://hackatime.hackclub.com/)
 3. Click **Save**
 4. Start designing!
+
+## Development
+
+### Automatic Builds
+
+This project uses GitHub Actions to automatically build the extension on every push to the main branch. You can download the latest build from the [Actions](https://github.com/wenfeng110402/EasyEDA-hackatime/actions) tab.
+
+### Local Development
+
+```bash
+npm run build    # Build the extension
+npm run compile  # Compile TypeScript only
+npm run lint     # Check code style
+npm run fix      # Auto-fix code style issues
+```
 
 ## Acknowledgements
 
