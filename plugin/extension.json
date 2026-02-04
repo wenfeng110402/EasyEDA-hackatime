@@ -3,7 +3,7 @@
 	"uuid": "6e7e9c168b5241dcaae63bfe8b953840",
 	"displayName": "HackaTime",
 	"description": "Track your PCB design time with Hackatime",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"publisher": "Wenfeng Ye",
 	"engines": {
 		"eda": "^3.0.0"
