@@ -20,6 +20,7 @@ Track your PCB design time in [EasyEDA Pro](https://easyeda.com/) with [Hackatim
 # Clone the repository
 git clone https://github.com/wenfeng110402/EasyEDA-hackatime.git
 cd EasyEDA-hackatime
+cd plugin
 
 # Install dependencies (requires Node.js >= 20.17.0)
 npm install
